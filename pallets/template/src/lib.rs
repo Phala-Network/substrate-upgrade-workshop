@@ -32,8 +32,6 @@ pub mod pallet {
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
-	// 2. Add two storages
-
 	#[pallet::storage]
 	pub type Posts<T: Config> = StorageMap<_, Twox64Concat, u32, Post<T::AccountId>>;
 
@@ -64,7 +62,7 @@ pub mod pallet {
 	#[pallet::call]
 	impl<T:Config> Pallet<T> {
 
-		// 3. Add `post()` call
+		// 2. Change `post()` and add `post_encrypted()`
 
 		#[pallet::weight(0)]
 		pub fn post(origin: OriginFor<T>, title: Vec<u8>, content: Vec<u8>) -> DispatchResult {
@@ -73,7 +71,22 @@ pub mod pallet {
 			let post_id = NextPost::<T>::get().unwrap_or(0);
 			Posts::<T>::insert(post_id, Post::<T::AccountId> {
 				title,
-				content,
+				content: Content::Plain(content),
+				author: who,
+			});
+
+			NextPost::<T>::put(post_id + 1);
+			Ok(())
+		}
+
+		#[pallet::weight(0)]
+		pub fn post_encrypted(origin: OriginFor<T>, title: Vec<u8>, content: Vec<u8>) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+
+			let post_id = NextPost::<T>::get().unwrap_or(0);
+			Posts::<T>::insert(post_id, Post::<T::AccountId> {
+				title,
+				content: Content::Encrypted(content),
 				author: who,
 			});
 
@@ -82,9 +95,10 @@ pub mod pallet {
 		}
 	}
 
-	// 1. Define a struct `Post`
+	// 1. Define v2 structs
 
-	use v1::Post;
+	use v2::{Content, Post};
+
 	pub mod v1 {
 		use codec::{Encode, Decode};
 		use sp_std::vec::Vec;
@@ -94,6 +108,26 @@ pub mod pallet {
 			pub title: Vec<u8>,
 			pub content: Vec<u8>,
 			pub author: AccountId,
+		}
+	}
+
+	// 1. Define v2 structs
+
+	pub mod v2 {
+		use codec::{Encode, Decode};
+		use sp_std::vec::Vec;
+
+		#[derive(Encode, Decode, Clone)]
+		pub struct Post<AccountId> {
+			pub title: Vec<u8>,
+			pub content: Content,
+			pub author: AccountId,
+		}
+
+		#[derive(Encode, Decode, Clone)]
+		pub enum Content {
+			Encrypted(Vec<u8>),
+			Plain(Vec<u8>)
 		}
 	}
 }
