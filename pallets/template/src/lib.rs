@@ -17,7 +17,7 @@ mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use frame_support::{dispatch::DispatchResult, pallet_prelude::*};
+	use frame_support::{dispatch::DispatchResult, pallet_prelude::*, traits::PalletVersion};
 	use frame_system::pallet_prelude::*;
 	use sp_std::vec::Vec;
 
@@ -95,7 +95,19 @@ pub mod pallet {
 		}
 	}
 
-	// 1. Define v2 structs
+	// 4. Add `on_runtime_upgrade` hook
+
+	#[pallet::hooks]
+	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+		fn on_runtime_upgrade() -> Weight {
+			match Self::storage_version() {
+				Some(version) if version < PalletVersion::new(3, 1, 0) => {
+					super::migrations::upgrade_posts_v2::<T>()
+				}
+				_ => 0,
+			}
+		}
+	}
 
 	use v2::{Content, Post};
 
@@ -110,8 +122,6 @@ pub mod pallet {
 			pub author: AccountId,
 		}
 	}
-
-	// 1. Define v2 structs
 
 	pub mod v2 {
 		use codec::{Encode, Decode};
@@ -129,5 +139,27 @@ pub mod pallet {
 			Encrypted(Vec<u8>),
 			Plain(Vec<u8>)
 		}
+	}
+}
+
+// 3. Add migration
+
+mod migrations {
+	use frame_support::pallet_prelude::*;
+	use super::{v1, v2, Config, Posts};
+
+	pub fn upgrade_posts_v2<T: Config>() -> Weight {
+		log::info!("Start upgrade_posts_v2");
+		let mut num_items = 0u32;
+		Posts::<T>::translate(|_k, o: v1::Post::<T::AccountId>| {
+			num_items += 1;
+			Some(v2::Post::<T::AccountId> {
+				title: o.title,
+				content: v2::Content::Plain(o.content),
+				author: o.author,
+			})
+		});
+		log::info!("Posts upgraded: {}", num_items);
+		0
 	}
 }
